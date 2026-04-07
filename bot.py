@@ -8,7 +8,7 @@ import os
 import base64
 
 # ВАШ ТОКЕН
-TOKEN = "ВАШ_ТОКЕН_СЮДА"
+TOKEN = "8752757389:AAHDzeKIEVzzYn7Xo1wfAWO7Qks74alhMiQ"
 
 user_languages = {}
 
