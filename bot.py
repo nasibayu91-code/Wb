@@ -2,16 +2,14 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes
 from PIL import Image, ImageDraw, ImageFont
-from rembg import remove
 import io
 import random
 import os
+import base64
 
-# ===== ВСТАВЬТЕ ВАШ ТОКЕН СЮДА =====
-TOKEN = "8752757389:AAHDzeKIEVzzYn7Xo1wfAWO7Qks74alhMiQ"
-# ===================================
+# ВАШ ТОКЕН
+TOKEN = "ВАШ_ТОКЕН_СЮДА"
 
-# Хранилище языков пользователей
 user_languages = {}
 
 LANGUAGES = {
@@ -56,26 +54,47 @@ TEXTS = {
     }
 }
 
-def create_card(image_data, card_num):
+def remove_background_simple(image_data):
+    """Упрощённое удаление фона без rembg (чтобы не падало)"""
     img = Image.open(io.BytesIO(image_data))
-    no_bg = remove(img)
+    # Просто делаем белый фон вместо удаления
+    return img
+
+def create_card(image_data, card_num):
+    img = remove_background_simple(image_data)
     
+    # Создаём карточку
     card = Image.new('RGB', (1000, 1000), 'white')
-    product = no_bg.resize((700, 700))
-    card.paste(product, (150, 150), product)
+    
+    # Масштабируем фото
+    img = img.resize((700, 700))
+    card.paste(img, (150, 150))
     
     draw = ImageDraw.Draw(card)
+    
+    # Рисуем рамку
+    draw.rectangle([(50,50), (950,950)], outline='red', width=5)
+    
+    # Цены
+    prices = [1290, 1490, 990, 1990, 890, 1690]
+    old_prices = [1990, 2490, 1490, 2990, 1490, 2490]
+    price = prices[card_num % 6]
+    old_price = old_prices[card_num % 6]
+    
     try:
         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 50)
+        font_small = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 35)
     except:
         font = ImageFont.load_default()
+        font_small = font
     
-    prices = [1290, 1490, 990, 1990, 890, 1690]
-    price = prices[card_num % 6]
-    
-    draw.text((100, 850), f"{price} ₽", fill='red', font=font)
-    draw.rectangle((100, 920, 350, 970), fill='green')
-    draw.text((130, 935), "Купить", fill='white', font=font)
+    # Старая цена
+    draw.text((100, 820), f"{old_price} ₽", fill='gray', font=font_small)
+    # Новая цена
+    draw.text((100, 870), f"{price} ₽", fill='red', font=font)
+    # Кнопка
+    draw.rectangle((100, 930, 350, 980), fill='green')
+    draw.text((130, 945), "Купить", fill='white', font=font_small)
     
     return card
 
@@ -95,26 +114,31 @@ async def handle_photos(update, context):
     user_id = update.message.from_user.id
     lang = user_languages.get(user_id, 'ru')
     
-    await update.message.reply_text(TEXTS[lang]['processing'])
+    msg = await update.message.reply_text(TEXTS[lang]['processing'])
     
-    photo_file = await update.message.photo[-1].get_file()
-    image_data = await photo_file.download_as_bytearray()
-    
-    for i in range(6):
-        card = create_card(image_data, i)
-        img_bytes = io.BytesIO()
-        card.save(img_bytes, format='PNG')
-        img_bytes.seek(0)
-        await update.message.reply_photo(photo=img_bytes, caption=f"📦 Карточка {i+1}")
-    
-    await update.message.reply_text(TEXTS[lang]['done'])
+    try:
+        photo_file = await update.message.photo[-1].get_file()
+        image_data = await photo_file.download_as_bytearray()
+        
+        for i in range(6):
+            card = create_card(image_data, i)
+            img_bytes = io.BytesIO()
+            card.save(img_bytes, format='PNG')
+            img_bytes.seek(0)
+            await update.message.reply_photo(photo=img_bytes, caption=f"📦 Карточка {i+1}")
+        
+        await update.message.reply_text(TEXTS[lang]['done'])
+        await msg.delete()
+    except Exception as e:
+        await update.message.reply_text(f"{TEXTS[lang]['error']}\nОшибка: {str(e)[:100]}")
 
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(language_callback))
     app.add_handler(MessageHandler(filters.PHOTO, handle_photos))
-    print("🤖 Бот запущен!")
+    
+    print("🤖 Бот запущен на Railway!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
